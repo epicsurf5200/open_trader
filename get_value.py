@@ -9,12 +9,15 @@ import time
 import math
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+import binance
+import config
 
-def get_value_binace(crypto_currency, currency, interval, limit):
+def get_value_binace(crypto_currency, currency):
     """Returns the current value of the crypto currency."""
-    url = f"https://api.binance.com/api/v3/klines?symbol={crypto_currency}{currency}&interval={interval}&limit={limit}"
-    response = requests.get(url)
-    json = response.json()
+    print("get_value_binace")
+    binance_client = binance.client.Client(config.binance_api_key, config.binance_api_secret)
+    coin_price = binance_client.get_symbol_ticker(symbol=f"{crypto_currency}{currency}")
+    breakpoint()
     df = pd.DataFrame(json)
     df = df.iloc[:, 0:6]
     col_names = ["time", "open", "high", "low", "close", "volume"]
@@ -28,9 +31,11 @@ def get_value_binace(crypto_currency, currency, interval, limit):
 
 def get_value_coinbase(crypto_currency, currency, interval, limit):
     """Returns the current value of the crypto currency."""
+    print("get_value_coinbase")
     url = f"https://api.pro.coinbase.com/products/{crypto_currency}-{currency}/candles?granularity={interval}&limit={limit}"
     response = requests.get(url)
     json = response.json()
+    breakpoint()
     df = pd.DataFrame(json)
     df = df.iloc[:, 0:6]
     col_names = ["time", "low", "high", "open", "close", "volume"]
@@ -42,20 +47,48 @@ def get_value_coinbase(crypto_currency, currency, interval, limit):
 
     return df
 
-def get_value_kraken(crypto_currency, currency, interval, limit):
-    """Returns the current value of the crypto currency."""
-    url = f"https://api.kraken.com/0/public/OHLC?pair={crypto_currency}{currency}&interval={interval}&since={limit}"
-    response = requests.get(url)
-    json = response.json()
-    df = pd.DataFrame(json["result"][f"{crypto_currency}{currency}"])
-    col_names = ["time", "open", "high", "low", "close", "volume", "vwap", "count"]
-    df.columns = col_names
-    df["time"] = pd.to_datetime(df["time"], unit="s")
-    df["close"] = df["close"].astype(float)
-    df["volume"] = df["volume"].astype(float)
-    df["open"] = df["open"].astype(float)
+def get_keys_kraken():
+    """Return the pair names for kraken."""
+    print("get pair names for kraken")
+    pairs_url = f"https://api.kraken.com/0/public/AssetPairs"
+    pairs_response = requests.get(pairs_url)
+    pairs_data = pairs_response.json()
+    pairs_data = pairs_data["result"]
 
-    return df
+    # extract the pair names
+    pairs_names = [pair for pair in pairs_data.keys()]
+    return pairs_names
+
+def get_live_data_kraken(pairs_names: list):
+    """Given a list of pair names, return the current price for each pair from the api. save the data to a csv file."""
+    current_prices = {}
+    for pair_name in pairs_names:
+        # get the current price for the pair
+        ticker_url = f"https://api.kraken.com/0/public/Ticker?pair={pair_name}"
+        ticker_response = requests.get(ticker_url)
+        ticker_data = ticker_response.json()
+        pair_key = list(ticker_data["result"].keys())[0]
+
+        current_price = ticker_data["result"][pair_key]["c"][0]
+        current_prices[pair_name] = current_price
+
+def get_history_data_kraken(cyptos: list):
+    """Given a list of pair names, return the data for each pair from the api. Save the data to a csv file."""
+    for cypto in cyptos:
+        # get the historical data for the pair over a given time period
+        historical_url = f"https://api.kraken.com/0/public/OHLC?pair={cypto['kraken_id']}&interval={config.kraken_history_interval}"
+        historical_response = requests.get(historical_url)
+        historical_data = historical_response.json()
+        pair_key = list(historical_data["result"].keys())[0]
+
+        historical_data = historical_data["result"][pair_key]
+        historical_data = pd.DataFrame(historical_data)
+        historical_data.columns = ["time", "open", "high", "low", "close", "vwap", "volume", "count"]
+        historical_data["time"] = pd.to_datetime(historical_data["time"], unit="s")
+
+        # save the data to a csv file in the log folder
+        historical_data.to_csv(f"logs/{cypto['symbol']}.csv", index=False)
+
 
 def plot_graph(df, crypto_currency, currency):
     """Plots a graph of the crypto currency."""
@@ -64,3 +97,15 @@ def plot_graph(df, crypto_currency, currency):
     plt.ylabel(f"{crypto_currency} price in {currency}")
     plt.title(f"{crypto_currency} price over time")
     plt.show()
+
+def get_combined_results(cypto_currenty, currency, interval, limit):
+    """Returns the current value of the crypto currency."""
+    #df_binance = get_value_binace(cypto_currenty, currency)
+    #df_coinbase = get_value_coinbase(cypto_currenty, currency, interval, limit)
+    df_kraken = get_data_kraken(pairs_names)
+    #df = pd.concat([df_binance, df_kraken])
+    #df = df.drop_duplicates(subset=["time"])
+    #df = df.sort_values(by=["time"])
+    #df = df.reset_index(drop=True)
+    #return df
+
