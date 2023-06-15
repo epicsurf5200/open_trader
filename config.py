@@ -1,9 +1,12 @@
+
 """Store configuration variables."""
+import cypto
 # current coins
-cypto_currency = [
+cypto_currencies = [
+    {"BTC": cypto.Cypto("Bitcoin", "BTC", "XBTUSD")},
     {"kraken_id":"XBTUSD", "name":"Bitcoin", "symbol":"BTC"},
     {"kraken_id":"ETHUSD", "name":"Ethereum", "symbol":"ETH"},           
-                  ]
+    ]
 
 # api keys
 binance_api_key = "cNkipXgJrCPMsfYyy3q4WrG2DRPqt2h5mStONOMqpYxxzxWutObigqAv8jUdVhX4"

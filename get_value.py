@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import binance
 import config
-
+import csv
 def get_value_binace(crypto_currency, currency):
     """Returns the current value of the crypto currency."""
     print("get_value_binace")
@@ -90,13 +90,38 @@ def get_history_data_kraken(cyptos: list):
         historical_data.to_csv(f"logs/{cypto['symbol']}.csv", index=False)
 
 
-def plot_graph(df, crypto_currency, currency):
-    """Plots a graph of the crypto currency."""
-    plt.plot(df["time"], df["close"])
-    plt.xlabel("Date")
-    plt.ylabel(f"{crypto_currency} price in {currency}")
-    plt.title(f"{crypto_currency} price over time")
-    plt.show()
+def plot_graph(coin_name):
+    """Plot the graph of the crypto currency from the csv file."""
+    # read the csv as a dictionary
+    csv_file = f"logs/{coin_name}.csv"
+    df = pd.read_csv(csv_file)
+    # convert the time to a datetime object
+    #df["time"] = pd.to_datetime(df["time"], unit="s")
+    #df["high"] = df["high"].astype(float)
+    #df["low"] = df["low"].astype(float)
+    #df["open"] = df["open"].astype(float)
+    #df["close"] = df["close"].astype(float)
+
+    # plot the graph
+    fig, ax = plt.subplots()
+    ax.plot(df["time"], df["high"], label="high")
+    ax.plot(df["time"], df["low"], label="low")
+    ax.plot(df["time"], df["open"], label="open")
+    ax.plot(df["time"], df["close"], label="close")
+    ax.set_xlabel("time")
+    ax.set_ylabel("price")
+
+    # format the x axis
+    ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%d-%m-%Y"))
+    fig.autofmt_xdate()
+
+    # add the legend
+    ax.legend()
+
+    # save the graph
+    fig.savefig(f"{csv_file}.png")
+
 
 def get_combined_results(cypto_currenty, currency, interval, limit):
     """Returns the current value of the crypto currency."""
