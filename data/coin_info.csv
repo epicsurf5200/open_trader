@@ -1,2 +1,3 @@
-# database for cypto currency attributes
-symbol, name, kraken_id
+symbol,name,kraken_id
+BTC,Bitcoin,XBTUSD
+ETH,Ethereum,ETHUSD

@@ -1,0 +1,1 @@
+"""get the owned value of the given coin from the """

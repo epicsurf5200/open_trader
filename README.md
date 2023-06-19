@@ -1,1 +1,1 @@
-# open_trader
+# open_trade is a ai powered cypto trading bot designed to leverage chatgpt 4 to monitor the current market and
