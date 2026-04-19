@@ -1,66 +1,29 @@
-"""get the current value for the cypto currency"""
-import requests
-import json
-import os
+"""Fetch OHLCV candles from Binance's public API."""
 import pandas as pd
-import numpy as np
-import datetime
-import time
-import math
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
+import requests
 
-def get_value_binace(crypto_currency, currency, interval, limit):
-    """Returns the current value of the crypto currency."""
-    url = f"https://api.binance.com/api/v3/klines?symbol={crypto_currency}{currency}&interval={interval}&limit={limit}"
-    response = requests.get(url)
-    json = response.json()
-    df = pd.DataFrame(json)
-    df = df.iloc[:, 0:6]
-    col_names = ["time", "open", "high", "low", "close", "volume"]
-    df.columns = col_names
-    df["time"] = pd.to_datetime(df["time"], unit="ms")
-    df["close"] = df["close"].astype(float)
-    df["volume"] = df["volume"].astype(float)
-    df["open"] = df["open"].astype(float)
+BINANCE_URL = "https://api.binance.com/api/v3/klines"
 
+
+def get_candles(symbol: str = "BTCUSDT", interval: str = "1h", limit: int = 100) -> pd.DataFrame:
+    """Return a DataFrame of OHLCV candles for `symbol` (e.g. BTCUSDT)."""
+    response = requests.get(
+        BINANCE_URL,
+        params={"symbol": symbol, "interval": interval, "limit": limit},
+        timeout=10,
+    )
+    response.raise_for_status()
+    rows = response.json()
+    df = pd.DataFrame(
+        rows,
+        columns=[
+            "open_time", "open", "high", "low", "close", "volume",
+            "close_time", "quote_volume", "trades",
+            "taker_base", "taker_quote", "ignore",
+        ],
+    )
+    df = df[["open_time", "open", "high", "low", "close", "volume"]].copy()
+    df["open_time"] = pd.to_datetime(df["open_time"], unit="ms")
+    for col in ("open", "high", "low", "close", "volume"):
+        df[col] = df[col].astype(float)
     return df
-
-def get_value_coinbase(crypto_currency, currency, interval, limit):
-    """Returns the current value of the crypto currency."""
-    url = f"https://api.pro.coinbase.com/products/{crypto_currency}-{currency}/candles?granularity={interval}&limit={limit}"
-    response = requests.get(url)
-    json = response.json()
-    df = pd.DataFrame(json)
-    df = df.iloc[:, 0:6]
-    col_names = ["time", "low", "high", "open", "close", "volume"]
-    df.columns = col_names
-    df["time"] = pd.to_datetime(df["time"], unit="s")
-    df["close"] = df["close"].astype(float)
-    df["volume"] = df["volume"].astype(float)
-    df["open"] = df["open"].astype(float)
-
-    return df
-
-def get_value_kraken(crypto_currency, currency, interval, limit):
-    """Returns the current value of the crypto currency."""
-    url = f"https://api.kraken.com/0/public/OHLC?pair={crypto_currency}{currency}&interval={interval}&since={limit}"
-    response = requests.get(url)
-    json = response.json()
-    df = pd.DataFrame(json["result"][f"{crypto_currency}{currency}"])
-    col_names = ["time", "open", "high", "low", "close", "volume", "vwap", "count"]
-    df.columns = col_names
-    df["time"] = pd.to_datetime(df["time"], unit="s")
-    df["close"] = df["close"].astype(float)
-    df["volume"] = df["volume"].astype(float)
-    df["open"] = df["open"].astype(float)
-
-    return df
-
-def plot_graph(df, crypto_currency, currency):
-    """Plots a graph of the crypto currency."""
-    plt.plot(df["time"], df["close"])
-    plt.xlabel("Date")
-    plt.ylabel(f"{crypto_currency} price in {currency}")
-    plt.title(f"{crypto_currency} price over time")
-    plt.show()

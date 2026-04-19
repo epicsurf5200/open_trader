@@ -2,47 +2,53 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Status
+## What This Is
 
-`open_trader` is an **early-stage scaffold** for a crypto trading bot. Most modules are skeletons or contain partial/broken code — assume nothing works end-to-end until proven otherwise. The README is a single line and there is no dependency manifest (`requirements.txt`, `pyproject.toml`, `Pipfile`, etc.), no test suite, no lint/format config, and no CI.
+`open_trader` pulls recent Binance candles, runs a simple SMA-crossover strategy, optionally asks OpenAI for a one-line takeaway, and posts the result to a Discord webhook. It's intentionally small — five short files — and is meant to be run on a schedule (cron, GitHub Actions, etc.), not as a long-running process.
 
-When asked to extend functionality, prefer **finishing the existing skeletons** over adding new modules.
+## Pipeline
 
-## Module Map
+`main.py` wires everything together in one pass:
 
-Four top-level Python files, each a single responsibility:
+```
+get_value.get_candles  →  strategy.signal  →  open_ai_client.commentary (optional)  →  output_to_discord.send
+```
 
-- `get_value.py` — Market data fetchers. `get_value_binace` (Binance), `get_value_coinbase` (Coinbase Pro), `get_value_kraken` (Kraken) each call the public klines/OHLC REST endpoint and return a pandas `DataFrame` of OHLCV candles. Also `plot_graph(df, ...)` using matplotlib. Note column-order differs per exchange (Coinbase returns `low, high, open, close`; Binance/Kraken return `open, high, low, close`) — callers cannot assume a uniform schema.
-- `strategy.py` — Intended home for pattern detection / signal logic. **Currently does not parse**: line 18 uses `object bullish_pattern:` where Python requires `class`. Imports `get_value` as a sibling module (flat layout, no package). Any change here must first fix the syntax error or the file can't be imported.
-- `open_ai_client.py` — Intended wrapper around the OpenAI API for interpreting market data. Currently only import statements, no functions.
-- `output_to_discord.py` — Discord bot entrypoint (`run_discord_bot`) that listens for messages and replies via `send_message`. `send_message` calls `responses.handle_response(...)` but `responses` is never imported/defined — this will raise `NameError` at runtime. The file also contains a **hardcoded Discord bot token** (line 15); treat it as compromised and move to an environment variable (e.g. `DISCORD_TOKEN`) before doing anything else here.
+Each step is one function in its own file. Keep it that way — if you're tempted to add a class, a framework, or an event loop, the answer is almost certainly "don't." New exchanges, strategies, or output channels should be siblings of the existing functions, not abstractions over them.
 
-There is no `main.py` or orchestrator wiring these together yet — the implied flow is `get_value → strategy → open_ai_client → output_to_discord`.
-
-## Running Things
-
-No package manifest exists, so install third-party deps ad-hoc into a venv:
+## Running It
 
 ```bash
 python -m venv venv && source venv/bin/activate
-pip install requests pandas numpy matplotlib openai discord.py
+pip install -r requirements.txt
+cp .env.example .env  # fill in DISCORD_WEBHOOK_URL; OPENAI_API_KEY optional
+set -a && source .env && set +a
+python main.py
 ```
 
-If you add new imports, also add a `requirements.txt` (or `pyproject.toml`) in the same change — dependency drift is the main risk in this repo.
+Run from the repo root — the modules import each other by bare name (flat layout, no package).
 
-Files are run directly (`python get_value.py`) since there is no package structure. Imports like `import get_value` in `strategy.py` rely on the repo root being on `sys.path`, which means scripts must be run from the repo root.
+## Configuration
 
-## Conventions Worth Preserving
+All runtime config is via environment variables, read in `main.py` and `open_ai_client.py`/`output_to_discord.py`:
 
-- **Flat module layout.** All files sit at the repo root and import each other by bare module name. Don't introduce a `src/` package without also updating the imports in `strategy.py`.
-- **DataFrame-first.** Market data moves between modules as pandas DataFrames, not dicts or dataclasses. New fetchers/strategies should match that shape.
-- **Module-level docstring + stdlib-before-third-party imports.** Every existing file opens with a one-line `"""docstring"""` and then imports; keep that pattern.
+- `DISCORD_WEBHOOK_URL` — **required**. A Discord channel webhook (not a bot token). `output_to_discord.send` raises `KeyError` if unset, which is intentional — fail loud.
+- `OPENAI_API_KEY` — optional. If unset, `open_ai_client.commentary` returns `None` and the commentary line is skipped. Do not add a fallback model or silent retry here.
+- `SYMBOL`, `INTERVAL` — optional; default `BTCUSDT` / `1h`. Must be valid Binance values.
 
-## Known Issues to Watch For
+There is no config file and no CLI parser. Keep it that way unless the option count grows past what env vars can reasonably handle.
 
-Any task touching these files should account for the pre-existing breakage rather than assuming the file is runnable:
+## Conventions
 
-1. `strategy.py:18` — invalid `object` keyword, won't import.
-2. `output_to_discord.py:9` — undefined `responses` symbol.
-3. `output_to_discord.py:15` — hardcoded secret; rotate and externalize.
-4. `open_ai_client.py` — empty module; functions need to be written from scratch.
+- **Flat layout.** All modules sit at the repo root. Don't move them into a `src/` package without also rewriting every import site.
+- **DataFrame in, scalar/string out.** `get_candles` returns a pandas DataFrame with columns `open_time, open, high, low, close, volume` (all floats except `open_time`). Downstream functions consume that shape and return primitives (`str` for signal, `str | None` for commentary). New strategies should follow the same contract.
+- **Module-level docstring first, stdlib imports before third-party.** Every file opens with a one-line `"""..."""` docstring.
+- **Let exceptions surface.** The HTTP calls use `raise_for_status` and fixed timeouts; don't wrap them in broad `try/except`. A loud failure in a scheduled job is easier to debug than a silent skip.
+
+## Dependencies
+
+`requirements.txt` is the source of truth — three packages (`requests`, `pandas`, `openai`). If you add an import, add it there in the same change. Notably **not** used: `numpy` (pandas is enough), `matplotlib` (no plotting), `discord.py` (webhooks are plain HTTP POSTs).
+
+## History Note
+
+A previous revision of `output_to_discord.py` contained a hardcoded Discord **bot** token (now removed in favor of a webhook URL). That token is still in git history — treat it as compromised and rotate it in the Discord developer portal if it hasn't been already.
